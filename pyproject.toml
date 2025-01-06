@@ -1,7 +1,26 @@
 [project]
 name = "dbtt"
-version = "0.1.1"
-description = "Add your description here"
+version = "0.1.2"
+description = "A toolkit designed to enhance and streamline your dbt workflows."
 readme = "README.md"
-requires-python = ">=3.8"
-dependencies = []
+requires-python = ">=3.10"
+authors = [
+    { name = "Cristian Webber" }
+
+]
+dependencies = [
+    "rich>=13.9.4",
+    "typer>=0.15.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.6",
+]
+
+[project.scripts]
+dbtt = "cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
