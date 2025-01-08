@@ -1,83 +1,24 @@
 from typer import Typer
 from rich.console import Console
 from rich.table import Table
-from rich.panel import Panel
 import os
 import subprocess
 from typing import Optional
 
 import typer
 from typing_extensions import Annotated
+from utils.list_changed_models import list_changed_models
+from utils.reorder_models import reorder_models_in_yml
 
 app = Typer()
 console = Console()
-
-
-def list_changed_models(branch: str):
-    """
-    List changed dbt models in the project for a given branch.
-
-    Args:
-        branch (str): The branch to compare changes against.
-
-    Returns:
-        List[Tuple[str, str, str]]: A list of tuples containing the model name, status, and color.
-    """
-
-    modified_result = subprocess.run(
-        ["git", "diff", "--name-only", branch],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    untracked_result = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    deleted_result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=D", branch],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    deleted_files = deleted_result.stdout.splitlines()
-    modified_files = [
-        file
-        for file in modified_result.stdout.splitlines()
-        if file not in deleted_files
-    ]
-    untracked_files = untracked_result.stdout.splitlines()
-
-    models = []
-    for file in modified_files:
-        if file.endswith(".sql"):
-            models.append(
-                (os.path.splitext(os.path.basename(file))[0], "Modified", "yellow")
-            )
-
-    for file in untracked_files:
-        if file.endswith(".sql"):
-            models.append((os.path.splitext(os.path.basename(file))[0], "New", "green"))
-
-    for file in deleted_files:
-        if file.endswith(".sql"):
-            models.append(
-                (os.path.splitext(os.path.basename(file))[0], "Deleted", "red")
-            )
-
-    return models
 
 
 @app.command()
 def list_changed(
     branch: Annotated[
         str,
-        typer.Argument(
-            help="The branch to compare changes against. Default is HEAD."
-        ),
+        typer.Argument(help="The branch to compare changes against. Default is HEAD."),
     ] = "HEAD",
 ):
     """List changed models not committed in the project."""
@@ -108,8 +49,44 @@ def list_changed(
 
 
 @app.command()
-def greet(name: str):
-    console.print(f"Hello, {name}!")
+def yml_fix(
+    path: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="The path to the .yml file. If not provided, all .yml files in the current directory starting with '_' will be processed."
+        ),
+    ] = None,
+):
+    if not path:
+        yml_files = [
+            os.path.join(root, file)
+            for root, _, files in os.walk(".")
+            for file in files
+            if file.endswith(".yml") and file.startswith("_")
+        ]
+        if not yml_files:
+            console.print(
+                "[bold red]Error:[/bold red] No valid .yml files found.", style="red"
+            )
+            return
+        for yml_file in yml_files:
+            reorder_models_in_yml(yml_file)
+            console.print(f"[bold green]Reordered models in:[/bold green] {yml_file}")
+    else:
+        if not os.path.isfile(path):
+            console.print(
+                f"[bold red]Error:[/bold red] The file '{path}' does not exist.",
+                style="red",
+            )
+            return
+        if not path.endswith(".yml"):
+            console.print(
+                f"[bold red]Error:[/bold red] The file '{path}' is not a .yml file.",
+                style="red",
+            )
+            return
+        reorder_models_in_yml(path)
+        console.print(f"[bold green]Reordered models in:[/bold green] {path}")
 
 
 def main():

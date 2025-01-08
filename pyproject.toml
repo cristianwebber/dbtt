@@ -9,12 +9,14 @@ authors = [
 
 ]
 dependencies = [
+    "pyyaml>=6.0.2",
     "rich>=13.9.4",
     "typer>=0.15.1",
 ]
 
 [dependency-groups]
 dev = [
+    "pytest>=8.3.4",
     "ruff>=0.8.6",
 ]
 
