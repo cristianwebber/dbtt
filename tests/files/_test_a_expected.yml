@@ -1,0 +1,19 @@
+models:
+
+- name: model_a
+  description: model_a description
+  columns:
+  - name: column1
+  - name: column2
+
+- name: model_b
+  description: model_b description
+  columns:
+  - name: column3
+  - name: column4
+
+- name: model_c
+  description: model_c description
+  columns:
+  - name: column5
+  - name: column6

@@ -2,42 +2,40 @@ import yaml
 import os
 from tempfile import NamedTemporaryFile
 from utils.reorder_models import reorder_models_in_yml
+from tempfile import TemporaryDirectory
 
 
 def test_reorder_models_in_yml():
-    with NamedTemporaryFile(delete=False, mode="w") as temp_file:
-        temp_file_path = temp_file.name
-        temp_file.write("""
-models:
-  - name: model_b
-  - name: model_c
-  - name: model_a
-""")
+    input_file_path = "tests/files/_test_a.yml"
+    output_file_path = "tests/files/_test_a_expected.yml"
 
-    reorder_models_in_yml(temp_file_path)
+    with open(input_file_path, "r") as input_file:
+        input_content = input_file.read()
 
-    with open(temp_file_path, "r") as file:
-        data = yaml.safe_load(file)
+    with TemporaryDirectory() as temp_dir:
+        temp_file_path = os.path.join(temp_dir, "temp_file.yml")
 
-    assert data["models"][0]["name"] == "model_a"
-    assert data["models"][1]["name"] == "model_b"
-    assert data["models"][2]["name"] == "model_c"
+        with open(temp_file_path, "w") as temp_file:
+            # write content to temp file
+            temp_file.write(input_content)
 
-    with open(temp_file_path, "r") as file:
-        content = file.read()
+        reorder_models_in_yml(temp_file_path)
 
-    expected_content = """
-models:
+        with open(temp_file_path, "r") as temp_file:
+            content = temp_file.read()
+            reordered_yml_data = yaml.safe_load(content)
 
-- name: model_a
+    print(content)
+    print(reordered_yml_data)
 
-- name: model_b
+    assert reordered_yml_data["models"][0]["name"] == "model_a"
+    assert reordered_yml_data["models"][1]["name"] == "model_b"
+    assert reordered_yml_data["models"][2]["name"] == "model_c"
 
-- name: model_c
-"""
-    assert content.strip() == expected_content.strip()
+    with open(output_file_path, "r") as file:
+        expected_content = file.read()
 
-    os.remove(temp_file_path)
+    assert content == expected_content
 
 
 def test_reorder_models_in_dbt_yml_empty_file():
