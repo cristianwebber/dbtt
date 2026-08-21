@@ -39,6 +39,19 @@ Key properties:
 - **Honest about limits.** `SELECT *` and un-aliased expressions can't be
   resolved offline — they're reported as warnings rather than silently guessed.
 
+### `dbtt yml fix` — reorder models in schema files
+
+Alphabetically reorders the `models:` in schema YAML files, preserving comments
+and formatting (unlike a naive round-trip).
+
+```bash
+dbtt yml fix models/            # report what would change (dry run)
+dbtt yml fix models/ --write    # reorder in place
+```
+
+Directories are scanned recursively; YAML files without a `models:` list (e.g.
+`_sources.yml`) are skipped.
+
 ### `dbtt lint` / `dbtt fix` — SQL style enforcement
 
 Lints and auto-fixes model SQL with [sqlfluff](https://sqlfluff.com), using an

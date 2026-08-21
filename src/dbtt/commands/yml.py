@@ -13,9 +13,12 @@ from ruamel.yaml import YAML
 from typing_extensions import Annotated
 
 from ..core import schema_gen, yaml_io
+from ..core.yaml_reorder import reorder_models
 
 app = typer.Typer(help="Generate and maintain dbt schema YAML files.")
 console = Console()
+
+YAML_SUFFIXES = (".yml", ".yaml")
 
 
 def _collect_sql_files(paths: list[Path]) -> list[Path]:
@@ -27,6 +30,28 @@ def _collect_sql_files(paths: list[Path]) -> list[Path]:
         for candidate in candidates:
             if candidate.suffix != ".sql":
                 console.print(f"[yellow]skip[/yellow] {candidate} (not a .sql file)")
+                continue
+            resolved = candidate.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                found.append(candidate)
+    return found
+
+
+def _collect_yml_files(paths: list[Path]) -> list[Path]:
+    """Expand files/directories into a sorted, de-duplicated list of YAML files."""
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        if path.is_dir():
+            candidates = sorted(
+                p for p in path.rglob("*") if p.suffix in YAML_SUFFIXES
+            )
+        else:
+            candidates = [path]
+        for candidate in candidates:
+            if candidate.suffix not in YAML_SUFFIXES:
+                console.print(f"[yellow]skip[/yellow] {candidate} (not a YAML file)")
                 continue
             resolved = candidate.resolve()
             if resolved not in seen:
@@ -131,3 +156,45 @@ def generate(
         for target, doc in docs.items():
             console.print(f"[magenta]# {target}[/magenta]")
             console.print(_dump_str(doc))
+
+
+@app.command()
+def fix(
+    paths: Annotated[
+        Optional[list[Path]],
+        typer.Argument(help="Schema .yml files or directories. Defaults to the current directory."),
+    ] = None,
+    write: Annotated[
+        bool,
+        typer.Option("--write/--dry-run", help="Write files. Without it, changes are only reported."),
+    ] = False,
+) -> None:
+    """Alphabetically reorder the models in schema YAML files (comments preserved)."""
+    yml_files = _collect_yml_files(paths or [Path(".")])
+    if not yml_files:
+        console.print("[bold red]Error:[/bold red] no YAML files found.")
+        raise typer.Exit(code=1)
+
+    table = Table(title="dbtt yml fix")
+    table.add_column("File", style="cyan")
+    table.add_column("Result", style="green")
+
+    changed = 0
+    for path in yml_files:
+        doc = yaml_io.load(path)
+        if not isinstance(doc, dict) or "models" not in doc:
+            table.add_row(str(path), "[dim]skipped (no models)[/dim]")
+            continue
+        if reorder_models(doc):
+            changed += 1
+            table.add_row(str(path), "reordered" if write else "would reorder")
+            if write:
+                yaml_io.dump(doc, path)
+        else:
+            table.add_row(str(path), "[dim]already sorted[/dim]")
+
+    console.print(table)
+    if write:
+        console.print(f"[bold green]Reordered[/bold green] {changed} file(s).")
+    elif changed:
+        console.print(f"[dim]{changed} file(s) would change — re-run with --write to apply.[/dim]")
