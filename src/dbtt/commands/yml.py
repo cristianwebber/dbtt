@@ -12,8 +12,7 @@ from rich.table import Table
 from ruamel.yaml import YAML
 from typing_extensions import Annotated
 
-from ..core import schema_gen, yaml_io
-from ..core.yaml_reorder import reorder_models
+from ..core import model_docs, schema_gen, yaml_io
 
 app = typer.Typer(help="Generate and maintain dbt schema YAML files.")
 console = Console()
@@ -60,10 +59,9 @@ def _collect_yml_files(paths: list[Path]) -> list[Path]:
     return found
 
 
-def _target_for(sql_file: Path, output: Optional[Path], filename: str) -> Path:
-    if output is not None:
-        return output
-    return sql_file.parent / filename
+def _target_for(sql_file: Path) -> Path:
+    # One YAML file per model, named after the model, beside its .sql.
+    return sql_file.with_suffix(".yml")
 
 
 def _dump_str(doc) -> str:
@@ -93,14 +91,6 @@ def generate(
         Optional[list[Path]],
         typer.Argument(help="Model .sql files or directories. Defaults to the current directory."),
     ] = None,
-    output: Annotated[
-        Optional[Path],
-        typer.Option("--output", "-o", help="Write all models into this single schema file."),
-    ] = None,
-    filename: Annotated[
-        str,
-        typer.Option("--filename", help="Schema filename created per model directory when --output is not set."),
-    ] = "_models.yml",
     placeholder: Annotated[
         str,
         typer.Option("--placeholder", help="Text used for new description fields."),
@@ -114,7 +104,7 @@ def generate(
         typer.Option("--write/--dry-run", help="Apply changes (default). Use --dry-run to preview without writing."),
     ] = True,
 ) -> None:
-    """Generate/refresh schema YAML from model SQL, preserving existing content."""
+    """Generate/refresh one YAML file per model from its SQL, preserving existing content."""
     sql_files = _collect_sql_files(paths or [Path(".")])
     if not sql_files:
         console.print("[bold red]Error:[/bold red] no .sql model files found.")
@@ -124,7 +114,7 @@ def generate(
     # loaded once and merged into, never overwritten per-model.
     groups: dict[Path, list[Path]] = {}
     for sql_file in sql_files:
-        groups.setdefault(_target_for(sql_file, output, filename), []).append(sql_file)
+        groups.setdefault(_target_for(sql_file), []).append(sql_file)
 
     table = Table(title="dbtt yml generate")
     table.add_column("Model", style="cyan")
@@ -178,46 +168,60 @@ def generate(
             console.print(_dump_str(doc))
 
 
+def _models_declared_in(path: Path) -> tuple[list[str], Optional[str]]:
+    """Return (model names declared in the YAML file, error)."""
+    doc, error = _safe_load(path)
+    if error is not None:
+        return [], error
+    if not isinstance(doc, dict):
+        return [], None
+    models = doc.get("models")
+    if not isinstance(models, list):
+        return [], None
+    return [m["name"] for m in models if isinstance(m, dict) and m.get("name")], None
+
+
 @app.command()
-def fix(
+def check(
     paths: Annotated[
         Optional[list[Path]],
-        typer.Argument(help="Schema .yml files or directories. Defaults to the current directory."),
+        typer.Argument(help="Model directories or files. Defaults to the current directory."),
     ] = None,
-    write: Annotated[
-        bool,
-        typer.Option("--write/--dry-run", help="Apply changes (default). Use --dry-run to preview without writing."),
-    ] = True,
 ) -> None:
-    """Alphabetically reorder the models in schema YAML files (comments preserved)."""
-    yml_files = _collect_yml_files(paths or [Path(".")])
-    if not yml_files:
-        console.print("[bold red]Error:[/bold red] no YAML files found.")
-        raise typer.Exit(code=1)
+    """Enforce one YAML file per model (each <model>.sql needs a sibling <model>.yml)."""
+    search = paths or [Path(".")]
+    sql_files = [p.resolve() for p in _collect_sql_files(search)]
+    yml_files = _collect_yml_files(search)
 
-    table = Table(title="dbtt yml fix")
-    table.add_column("File", style="cyan")
-    table.add_column("Result", style="green")
-
-    changed = 0
+    yml_models: dict[Path, list[str]] = {}
+    load_errors = 0
     for path in yml_files:
-        doc, error = _safe_load(path)
+        names, error = _models_declared_in(path)
         if error is not None:
-            table.add_row(str(path), f"[red]load error:[/red] {error}")
+            console.print(f"[red]load error[/red] {path}: {error}")
+            load_errors += 1
             continue
-        if not isinstance(doc, dict) or "models" not in doc:
-            table.add_row(str(path), "[dim]skipped (no models)[/dim]")
-            continue
-        if reorder_models(doc):
-            changed += 1
-            table.add_row(str(path), "reordered" if write else "would reorder")
-            if write:
-                yaml_io.dump(doc, path)
-        else:
-            table.add_row(str(path), "[dim]already sorted[/dim]")
+        if names:
+            yml_models[path.resolve()] = names
 
+    violations = model_docs.check(sql_files, yml_models)
+
+    if not violations and not load_errors:
+        console.print(
+            f"[bold green]OK[/bold green] — {len(sql_files)} model(s), one YAML file each."
+        )
+        return
+
+    table = Table(title="dbtt yml check")
+    table.add_column("File", style="cyan")
+    table.add_column("Problem", style="red")
+    table.add_column("Detail", style="yellow")
+    for v in violations:
+        table.add_row(str(v.path), v.kind, v.message)
     console.print(table)
-    if write:
-        console.print(f"[bold green]Reordered[/bold green] {changed} file(s).")
-    elif changed:
-        console.print(f"[dim]{changed} file(s) would change — re-run with --write to apply.[/dim]")
+    console.print(
+        f"[bold red]{len(violations)} violation(s)[/bold red]"
+        + (f", {load_errors} unreadable file(s)" if load_errors else "")
+        + "."
+    )
+    raise typer.Exit(code=1)

@@ -30,8 +30,13 @@ The published console script is `dbtt` → `dbtt.cli:main`.
 `src/`-layout package `dbtt`. The CLI is Typer with a mix of command groups and
 top-level verbs, assembled in `cli.py`:
 
-- `dbtt yml generate` — group in `commands/yml.py`
+- `dbtt yml generate` / `dbtt yml check` — group in `commands/yml.py`
 - `dbtt lint` / `dbtt fix` — top-level verbs in `commands/lint.py`
+
+**Core convention: one YAML file per model.** Each `<model>.sql` is documented
+by a sibling `<model>.yml` holding exactly that model. `yml generate` writes
+files this way (never a shared/combined file); `yml check` enforces it
+(`core/model_docs.py`) and exits non-zero for CI.
 
 `cli.py`'s root callback constructs one `Context` (`context.py`) per invocation
 and stores it on `ctx.obj`. `Context.project` lazily discovers the surrounding

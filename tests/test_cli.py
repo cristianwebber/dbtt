@@ -1,4 +1,4 @@
-"""End-to-end CLI tests for `dbtt yaml generate`."""
+"""End-to-end CLI tests for `dbtt yml generate`."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def _make_model(models_dir, name, sql):
     (models_dir / f"{name}.sql").write_text(sql)
 
 
-def test_generate_writes_schema_file(tmp_path):
+def test_generate_writes_one_yaml_per_model(tmp_path):
     models = tmp_path / "models" / "staging"
     _make_model(models, "stg_orders", "select id, amount from {{ ref('raw_orders') }}")
 
@@ -24,7 +24,7 @@ def test_generate_writes_schema_file(tmp_path):
     )
     assert result.exit_code == 0, result.output
 
-    out = models / "_models.yml"
+    out = models / "stg_orders.yml"  # named after the model
     assert out.exists()
     doc = yaml_io.load(out)
     assert doc["models"][0]["name"] == "stg_orders"
@@ -37,7 +37,7 @@ def test_generate_applies_by_default(tmp_path):
     _make_model(models, "m", "select id from {{ ref('src') }}")
     result = runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
     assert result.exit_code == 0
-    assert (models / "_models.yml").exists()
+    assert (models / "m.yml").exists()
 
 
 def test_generate_dry_run_writes_nothing(tmp_path):
@@ -46,14 +46,14 @@ def test_generate_dry_run_writes_nothing(tmp_path):
 
     result = runner.invoke(app, ["yml", "generate", str(models), "--dry-run", "--dialect", "duckdb"])
     assert result.exit_code == 0
-    assert not (models / "_models.yml").exists()
+    assert not (models / "m.yml").exists()
     assert "id" in result.output  # preview printed
 
 
 def test_generate_is_idempotent_and_preserves_comments(tmp_path):
     models = tmp_path / "models"
     _make_model(models, "m", "select id from {{ ref('src') }}")
-    out = models / "_models.yml"
+    out = models / "m.yml"
 
     runner.invoke(app, ["yml", "generate", str(models), "--write", "--dialect", "duckdb"])
     # Simulate a human adding a comment + description.
@@ -70,36 +70,20 @@ def test_generate_is_idempotent_and_preserves_comments(tmp_path):
     assert "# core model" in out.read_text()
 
 
-def test_generate_output_file_groups_all_models(tmp_path):
-    models = tmp_path / "models"
-    _make_model(models, "a", "select id from {{ ref('x') }}")
-    _make_model(models, "b", "select id from {{ ref('y') }}")
-    combined = tmp_path / "schema.yml"
-
-    result = runner.invoke(
-        app,
-        ["yml", "generate", str(models), "-o", str(combined), "--write", "--dialect", "duckdb"],
-    )
-    assert result.exit_code == 0
-    doc = yaml_io.load(combined)
-    names = sorted(m["name"] for m in doc["models"])
-    assert names == ["a", "b"]
-
-
-def test_generate_writes_one_file_per_directory(tmp_path):
+def test_generate_writes_one_file_per_model_across_dirs(tmp_path):
     _make_model(tmp_path / "models" / "staging", "stg_a", "select id from {{ ref('x') }}")
     _make_model(tmp_path / "models" / "marts", "fct_b", "select id from {{ ref('y') }}")
 
     result = runner.invoke(app, ["yml", "generate", str(tmp_path / "models"), "--dialect", "duckdb"])
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "models" / "staging" / "_models.yml").exists()
-    assert (tmp_path / "models" / "marts" / "_models.yml").exists()
+    assert (tmp_path / "models" / "staging" / "stg_a.yml").exists()
+    assert (tmp_path / "models" / "marts" / "fct_b.yml").exists()
 
 
 def test_generate_merges_preserving_descriptions(tmp_path):
     models = tmp_path / "models"
     _make_model(models, "m", "select id from {{ ref('src') }}")
-    out = models / "_models.yml"
+    out = models / "m.yml"
 
     runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
     # A human documents the model and column...
@@ -131,7 +115,7 @@ def test_generate_reports_select_star_warning(tmp_path):
 def test_generate_does_not_clobber_unreadable_target(tmp_path):
     models = tmp_path / "models"
     _make_model(models, "m", "select id from {{ ref('x') }}")
-    bad = models / "_models.yml"
+    bad = models / "m.yml"
     bad.write_text("foo: [1, 2\n")  # malformed YAML
 
     result = runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
@@ -143,7 +127,7 @@ def test_generate_does_not_clobber_unreadable_target(tmp_path):
 def test_generate_skips_non_mapping_target(tmp_path):
     models = tmp_path / "models"
     _make_model(models, "m", "select id from {{ ref('x') }}")
-    target = models / "_models.yml"
+    target = models / "m.yml"
     target.write_text("- a\n- b\n")  # valid YAML, but a list not a mapping
 
     result = runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
@@ -156,3 +140,15 @@ def test_generate_no_models_errors(tmp_path):
     empty.mkdir()
     result = runner.invoke(app, ["yml", "generate", str(empty)])
     assert result.exit_code == 1
+
+
+def test_generated_layout_passes_check(tmp_path):
+    # Generation output should satisfy the one-file-per-model check.
+    models = tmp_path / "models"
+    _make_model(models, "stg_a", "select id from {{ ref('x') }}")
+    _make_model(models, "stg_b", "select id from {{ ref('y') }}")
+    runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
+
+    result = runner.invoke(app, ["yml", "check", str(models)])
+    assert result.exit_code == 0, result.output
+    assert "OK" in result.output

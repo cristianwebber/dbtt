@@ -15,25 +15,25 @@ uv run dbtt --help
 
 ## Commands
 
-### `dbtt yml generate` — schema YAML from model SQL
+dbtt enforces **one YAML file per model**: each `models/.../<model>.sql` is
+documented by a sibling `<model>.yml` containing exactly that model. Small,
+self-contained doc files are easier to review and to feed to LLMs than one big
+shared schema file.
 
-Generates or refreshes dbt schema (`.yml`) files by statically parsing your
-model SQL and extracting output columns. Runs fully offline — no warehouse
+### `dbtt yml generate` — one schema YAML per model
+
+Generates or refreshes a `<model>.yml` beside each model's `.sql` by statically
+parsing the SQL and extracting output columns. Runs fully offline — no warehouse
 connection required — using [sqlglot](https://github.com/tobymao/sqlglot).
 
 ```bash
-# Write one _models.yml per model directory, merging into existing files
-dbtt yml generate models --dialect duckdb
-
-# Preview without writing
-dbtt yml generate models/staging --dry-run --dialect duckdb
-
-# Collapse everything into a single schema file
-dbtt yml generate models -o models/schema.yml
+dbtt yml generate models                     # write <model>.yml for each model
+dbtt yml generate models/staging --dry-run   # preview without writing
 ```
 
 Key properties:
 
+- **One file per model.** `stg_orders.sql` → `stg_orders.yml`, next to it.
 - **Non-destructive / additive.** Existing descriptions, tests, and column
   order are preserved; only missing models and columns are added.
 - **Comment-preserving.** Uses `ruamel.yaml` round-tripping, so hand-written
@@ -41,18 +41,18 @@ Key properties:
 - **Honest about limits.** `SELECT *` and un-aliased expressions can't be
   resolved offline — they're reported as warnings rather than silently guessed.
 
-### `dbtt yml fix` — reorder models in schema files
+### `dbtt yml check` — enforce one file per model
 
-Alphabetically reorders the `models:` in schema YAML files, preserving comments
-and formatting (unlike a naive round-trip).
+Verifies the convention and exits non-zero on any violation, so it can gate CI.
 
 ```bash
-dbtt yml fix models/              # reorder in place (default)
-dbtt yml fix models/ --dry-run    # report what would change, write nothing
+dbtt yml check models
 ```
 
-Directories are scanned recursively; YAML files without a `models:` list (e.g.
-`_sources.yml`) are skipped.
+Flags three problems: a YAML file documenting more than one model
+(`multiple_models`), a single-model file not named after its model
+(`misnamed`), and a model no YAML documents at all (`missing`). Sources/seed
+files that declare no `models:` are ignored.
 
 ### `dbtt lint` / `dbtt fix` — SQL style enforcement
 
