@@ -31,11 +31,20 @@ def test_generate_writes_schema_file(tmp_path):
     assert [c["name"] for c in doc["models"][0]["columns"]] == ["id", "amount"]
 
 
+def test_generate_applies_by_default(tmp_path):
+    # No flag -> the schema file is written.
+    models = tmp_path / "models"
+    _make_model(models, "m", "select id from {{ ref('src') }}")
+    result = runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
+    assert result.exit_code == 0
+    assert (models / "_models.yml").exists()
+
+
 def test_generate_dry_run_writes_nothing(tmp_path):
     models = tmp_path / "models"
     _make_model(models, "m", "select id from {{ ref('src') }}")
 
-    result = runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
+    result = runner.invoke(app, ["yml", "generate", str(models), "--dry-run", "--dialect", "duckdb"])
     assert result.exit_code == 0
     assert not (models / "_models.yml").exists()
     assert "id" in result.output  # preview printed

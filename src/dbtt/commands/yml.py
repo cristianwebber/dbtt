@@ -99,8 +99,8 @@ def generate(
     ] = None,
     write: Annotated[
         bool,
-        typer.Option("--write/--dry-run", help="Write files. Without it, the result is printed for preview."),
-    ] = False,
+        typer.Option("--write/--dry-run", help="Apply changes (default). Use --dry-run to preview without writing."),
+    ] = True,
 ) -> None:
     """Generate/refresh schema YAML from model SQL, preserving existing content."""
     sql_files = _collect_sql_files(paths or [Path(".")])
@@ -166,8 +166,8 @@ def fix(
     ] = None,
     write: Annotated[
         bool,
-        typer.Option("--write/--dry-run", help="Write files. Without it, changes are only reported."),
-    ] = False,
+        typer.Option("--write/--dry-run", help="Apply changes (default). Use --dry-run to preview without writing."),
+    ] = True,
 ) -> None:
     """Alphabetically reorder the models in schema YAML files (comments preserved)."""
     yml_files = _collect_yml_files(paths or [Path(".")])

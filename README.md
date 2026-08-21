@@ -20,14 +20,14 @@ model SQL and extracting output columns. Runs fully offline — no warehouse
 connection required — using [sqlglot](https://github.com/tobymao/sqlglot).
 
 ```bash
-# Preview (dry run) for every model under models/staging
-dbtt yml generate models/staging --dialect duckdb
-
 # Write one _models.yml per model directory, merging into existing files
-dbtt yml generate models --write --dialect duckdb
+dbtt yml generate models --dialect duckdb
+
+# Preview without writing
+dbtt yml generate models/staging --dry-run --dialect duckdb
 
 # Collapse everything into a single schema file
-dbtt yml generate models -o models/schema.yml --write
+dbtt yml generate models -o models/schema.yml
 ```
 
 Key properties:
@@ -45,8 +45,8 @@ Alphabetically reorders the `models:` in schema YAML files, preserving comments
 and formatting (unlike a naive round-trip).
 
 ```bash
-dbtt yml fix models/            # report what would change (dry run)
-dbtt yml fix models/ --write    # reorder in place
+dbtt yml fix models/              # reorder in place (default)
+dbtt yml fix models/ --dry-run    # report what would change, write nothing
 ```
 
 Directories are scanned recursively; YAML files without a `models:` list (e.g.

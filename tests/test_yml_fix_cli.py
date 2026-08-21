@@ -27,9 +27,18 @@ def test_fix_reorders_in_place(tmp_path):
     assert lines == ["- name: a", "- name: b", "- name: c"]
 
 
-def test_fix_dry_run_writes_nothing(tmp_path):
+def test_fix_applies_by_default(tmp_path):
+    # No flag -> changes are written.
     schema = _schema(tmp_path / "models")
     result = runner.invoke(app, ["yml", "fix", str(schema)])
+    assert result.exit_code == 0
+    lines = [ln.strip() for ln in schema.read_text().splitlines() if "name:" in ln]
+    assert lines == ["- name: a", "- name: b", "- name: c"]
+
+
+def test_fix_dry_run_writes_nothing(tmp_path):
+    schema = _schema(tmp_path / "models")
+    result = runner.invoke(app, ["yml", "fix", str(schema), "--dry-run"])
     assert result.exit_code == 0
     assert schema.read_text() == UNSORTED
     assert "would reorder" in result.output
