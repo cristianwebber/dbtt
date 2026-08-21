@@ -22,6 +22,7 @@ class DbtProject:
     root: Path
     name: str
     model_paths: list[str]
+    profile: str | None = None
 
     @property
     def model_dirs(self) -> list[Path]:
@@ -48,8 +49,10 @@ def find_project(start: Path | None = None) -> DbtProject | None:
 def _load(project_file: Path) -> DbtProject:
     data = yaml_io.load(project_file) or {}
     model_paths = data.get("model-paths") or DEFAULT_MODEL_PATHS
+    profile = data.get("profile")
     return DbtProject(
         root=project_file.parent,
         name=str(data.get("name", project_file.parent.name)),
         model_paths=list(model_paths),
+        profile=str(profile) if profile else None,
     )

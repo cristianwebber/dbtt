@@ -39,6 +39,38 @@ Key properties:
 - **Honest about limits.** `SELECT *` and un-aliased expressions can't be
   resolved offline — they're reported as warnings rather than silently guessed.
 
+### `dbtt lint` / `dbtt fix` — SQL style enforcement
+
+Lints and auto-fixes model SQL with [sqlfluff](https://sqlfluff.com), using an
+opinionated bundled ruleset — **unless the project ships its own `.sqlfluff`,
+in which case dbtt defers to it entirely** (the two are never merged).
+
+```bash
+dbtt lint models/            # report violations
+dbtt fix models/             # auto-fix in place
+dbtt fix models/ --check     # show what would change, write nothing
+dbtt lint models/ --dialect bigquery   # override the dialect
+```
+
+The **dialect is auto-detected** from your dbt profile (`profiles.yml` adapter
+`type`), so the same ruleset works for Snowflake, BigQuery, Postgres, DuckDB,
+and more. Pass `--dialect` to override, or when there's no profile to read.
+
+Bundled house style:
+
+| Rule | Setting |
+| --- | --- |
+| Commas | leading |
+| Keywords | UPPERCASE |
+| Functions / types / literals | lowercase |
+| Line length | 120 |
+| Indentation | 4 spaces |
+| Aliases | explicit `AS` (columns & tables) |
+| Columns in joins | must be table-qualified |
+| `GROUP BY` / `ORDER BY` | by column name, not position |
+
+Override any of these by adding your own `.sqlfluff` to the project.
+
 ## Development
 
 ```bash
