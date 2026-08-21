@@ -86,6 +86,48 @@ def test_generate_output_file_groups_all_models(tmp_path):
     assert names == ["a", "b"]
 
 
+def test_generate_writes_one_file_per_directory(tmp_path):
+    _make_model(tmp_path / "models" / "staging", "stg_a", "select id from {{ ref('x') }}")
+    _make_model(tmp_path / "models" / "marts", "fct_b", "select id from {{ ref('y') }}")
+
+    result = runner.invoke(app, ["yml", "generate", str(tmp_path / "models"), "--dialect", "duckdb"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "models" / "staging" / "_models.yml").exists()
+    assert (tmp_path / "models" / "marts" / "_models.yml").exists()
+
+
+def test_generate_merges_preserving_descriptions(tmp_path):
+    models = tmp_path / "models"
+    _make_model(models, "m", "select id from {{ ref('src') }}")
+    out = models / "_models.yml"
+
+    runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
+    # A human documents the model and column...
+    doc = yaml_io.load(out)
+    doc["models"][0]["description"] = "My model"
+    doc["models"][0]["columns"][0]["description"] = "The id"
+    yaml_io.dump(doc, out)
+
+    # ...then a new column appears and we regenerate.
+    (models / "m.sql").write_text("select id, amount from {{ ref('src') }}")
+    result = runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
+    assert result.exit_code == 0
+
+    doc = yaml_io.load(out)
+    model = doc["models"][0]
+    assert model["description"] == "My model"          # preserved
+    assert model["columns"][0]["description"] == "The id"  # preserved
+    assert [c["name"] for c in model["columns"]] == ["id", "amount"]  # amount added
+
+
+def test_generate_reports_select_star_warning(tmp_path):
+    models = tmp_path / "models"
+    _make_model(models, "m", "select * from {{ ref('src') }}")
+    result = runner.invoke(app, ["yml", "generate", str(models), "--dry-run", "--dialect", "duckdb"])
+    assert result.exit_code == 0
+    assert "SELECT *" in result.output
+
+
 def test_generate_no_models_errors(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()

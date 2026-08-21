@@ -70,6 +70,20 @@ def test_invalid_uppercase_raises(tmp_path):
         load_config(tmp_path, tmp_path)
 
 
+def test_unknown_key_raises(tmp_path):
+    # A typo like `comma` (missing the s) should be caught, not silently ignored.
+    (tmp_path / "dbtt.toml").write_text("comma = \"leading\"\n")
+    with pytest.raises(ConfigError) as err:
+        load_config(tmp_path, tmp_path)
+    assert "comma" in str(err.value)
+
+
+def test_unknown_key_in_pyproject_tool_table_raises(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("[tool.dbtt]\nbogus = 1\n")
+    with pytest.raises(ConfigError):
+        load_config(tmp_path, tmp_path)
+
+
 def _read_rendered(config: DbttConfig) -> configparser.ConfigParser:
     parser = configparser.ConfigParser(interpolation=None)
     parser.read_string(render_bundled_config(config))

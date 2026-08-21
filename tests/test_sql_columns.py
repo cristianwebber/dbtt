@@ -30,6 +30,15 @@ CASES = [
         "create table orders as select 1 as id, 1 as cid;"
         "create table customers as select 1 as id, 'a' as name",
     ),
+    (
+        "select id, amount from a union all select id, amount from b",
+        "create table a as select 1 as id, 2 as amount;"
+        "create table b as select 3 as id, 4 as amount",
+    ),
+    (
+        "select o.id as order_id from orders o",
+        "create table orders as select 1 as id",
+    ),
 ]
 
 
@@ -44,6 +53,31 @@ def test_extract_matches_duckdb(query, setup, duckdb_columns):
 def test_select_star_is_flagged():
     result = extract_columns("select * from customers", dialect="duckdb")
     assert result.has_star is True
+    assert result.columns == []
+
+
+def test_qualified_star_is_flagged():
+    result = extract_columns("select t.* from orders as t", dialect="duckdb")
+    assert result.has_star is True
+    assert result.columns == []
+
+
+def test_star_mixed_with_columns_flags_and_keeps_named():
+    result = extract_columns("select id, t.* from orders as t", dialect="duckdb")
+    assert result.has_star is True
+    assert result.columns == ["id"]
+
+
+def test_duplicate_output_names_are_deduped():
+    # Two projections that resolve to the same name are collapsed once; schema
+    # YAML can't carry two columns with the same name anyway.
+    result = extract_columns("select id, id from orders", dialect="duckdb")
+    assert result.columns == ["id"]
+
+
+def test_unparseable_sql_reports_error():
+    result = extract_columns("this is not sql ;;;", dialect="duckdb")
+    assert result.error is not None
     assert result.columns == []
 
 

@@ -38,6 +38,12 @@ class DbttConfig:
     @classmethod
     def from_dict(cls, data: dict, source: Path | None) -> "DbttConfig":
         config = cls(source=source)
+        unknown = set(data) - {"commas", "uppercase_keywords"}
+        if unknown:
+            raise ConfigError(
+                f"unknown dbtt setting(s) {sorted(unknown)} in {source}; "
+                "valid keys are 'commas', 'uppercase_keywords'"
+            )
         if "commas" in data:
             commas = data["commas"]
             if commas not in VALID_COMMAS:

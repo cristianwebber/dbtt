@@ -70,6 +70,23 @@ def test_detect_none_without_profiles_file(tmp_path):
     assert detect_dialect(project) is None
 
 
+def test_detect_none_when_profiles_unparseable(tmp_path):
+    # A profiles.yml dbtt can't parse must degrade gracefully to None, not raise.
+    (tmp_path / "dbt_project.yml").write_text("name: demo\nprofile: demo\n")
+    (tmp_path / "profiles.yml").write_text("demo: {this is : not valid yaml\n")
+    project = find_project(tmp_path)
+    assert detect_dialect(project) is None
+
+
+def test_detect_none_when_profile_name_absent_from_profiles(tmp_path):
+    (tmp_path / "dbt_project.yml").write_text("name: demo\nprofile: missing\n")
+    (tmp_path / "profiles.yml").write_text(
+        "other:\n  target: dev\n  outputs:\n    dev:\n      type: duckdb\n"
+    )
+    project = find_project(tmp_path)
+    assert detect_dialect(project) is None
+
+
 def test_detect_env_profiles_dir(tmp_path, monkeypatch):
     proj = tmp_path / "proj"
     proj.mkdir()

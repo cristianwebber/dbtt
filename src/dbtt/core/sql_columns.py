@@ -91,11 +91,10 @@ def extract_columns(sql: str, dialect: str | None = None) -> ColumnExtraction:
     except Exception as err:  # sqlglot raises many parse error subtypes
         return ColumnExtraction(error=f"could not parse SQL: {err}")
 
-    select = statement.find(exp.Select) if not isinstance(statement, exp.Select) else statement
-    # For a top-level SELECT sqlglot keeps CTEs on the same node, so this is the
-    # final projection. find() would otherwise dive into a CTE's inner select.
-    if isinstance(statement, exp.Select):
-        select = statement
+    # A top-level SELECT (even one with CTEs) is itself the final projection;
+    # only fall back to find() for wrappers like UNION, where the first SELECT
+    # defines the output column names.
+    select = statement if isinstance(statement, exp.Select) else statement.find(exp.Select)
     if select is None:
         return ColumnExtraction(error="no SELECT statement found")
 

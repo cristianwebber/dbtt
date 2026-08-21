@@ -93,7 +93,12 @@ def merge_model(
             unnamed=extraction.unnamed,
         )
 
-    existing_cols = existing.setdefault("columns", CommentedSeq())
+    # An existing model may have `columns:` present but empty (parsed as None);
+    # normalize to a sequence before appending.
+    existing_cols = existing.get("columns")
+    if not isinstance(existing_cols, list):
+        existing_cols = CommentedSeq()
+        existing["columns"] = existing_cols
     known = {c.get("name") for c in existing_cols if isinstance(c, dict)}
     added: list[str] = []
     for col in extraction.columns:

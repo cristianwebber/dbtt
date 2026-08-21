@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
-from dbtt.core.sqlfluff_config import bundled_config_path, resolve_config
+from dbtt.core.config import DbttConfig
+from dbtt.core.sqlfluff_config import (
+    bundled_config_text,
+    render_bundled_config,
+    resolve_config,
+)
 
 
 def test_bundled_used_when_no_user_config(tmp_path):
     resolved = resolve_config(tmp_path, tmp_path)
     assert resolved.source == "bundled"
-    assert resolved.path is not None
-    assert resolved.path.exists()
 
 
 def test_user_config_takes_precedence(tmp_path):
     (tmp_path / ".sqlfluff").write_text("[sqlfluff]\ndialect = duckdb\n")
     resolved = resolve_config(tmp_path, tmp_path)
     assert resolved.source == "user"
-    assert resolved.path is None  # sqlfluff will auto-discover it
 
 
 def test_user_config_found_walking_up(tmp_path):
@@ -38,6 +40,14 @@ def test_search_stops_at_project_root(tmp_path):
 
 def test_bundled_config_has_no_dialect():
     # Dialect is supplied at runtime, never hardcoded in the ruleset.
-    text = bundled_config_path().read_text()
+    text = bundled_config_text()
     assert "line_position = leading" in text
     assert "dialect =" not in text
+
+
+def test_render_is_valid_and_dialect_free():
+    # The rendered effective config must remain dialect-free (supplied at runtime)
+    # and carry the requested toggles.
+    text = render_bundled_config(DbttConfig())
+    assert "dialect" not in text
+    assert "line_position = leading" in text

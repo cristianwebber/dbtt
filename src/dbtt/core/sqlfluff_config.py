@@ -9,8 +9,9 @@ never merged — a user config fully replaces the defaults.
 from __future__ import annotations
 
 import configparser
+import io
 from dataclasses import dataclass
-from importlib.resources import as_file, files
+from importlib.resources import files
 from pathlib import Path
 
 from .config import DbttConfig
@@ -24,7 +25,6 @@ _KEYWORDS_SECTION = "sqlfluff:rules:capitalisation.keywords"
 @dataclass
 class ResolvedConfig:
     source: str  # "user" or "bundled"
-    path: Path | None  # bundled config path to pass via --config; None when user-owned
 
 
 def _find_user_config(start: Path, stop: Path | None) -> Path | None:
@@ -41,20 +41,14 @@ def _find_user_config(start: Path, stop: Path | None) -> Path | None:
     return None
 
 
-def bundled_config_path() -> Path:
-    """Filesystem path to the packaged default ruleset."""
-    resource = files("dbtt.rules") / "default.sqlfluff"
-    # as_file materializes the resource if the package is zipped; for a normal
-    # (unzipped) install it returns the real path.
-    with as_file(resource) as path:
-        return Path(path)
+def bundled_config_text() -> str:
+    """The packaged default ruleset as text (works for zipped installs too)."""
+    return files("dbtt.rules").joinpath("default.sqlfluff").read_text(encoding="utf-8")
 
 
 def resolve_config(start: Path, project_root: Path | None) -> ResolvedConfig:
     user = _find_user_config(start, project_root)
-    if user is not None:
-        return ResolvedConfig(source="user", path=None)
-    return ResolvedConfig(source="bundled", path=bundled_config_path())
+    return ResolvedConfig(source="user" if user is not None else "bundled")
 
 
 def render_bundled_config(config: DbttConfig) -> str:
@@ -65,8 +59,8 @@ def render_bundled_config(config: DbttConfig) -> str:
     ``[tool.dbtt]`` settings change the effective ruleset without editing it.
     """
     parser = configparser.ConfigParser(interpolation=None)
-    parser.optionxform = str  # preserve key casing exactly
-    parser.read(bundled_config_path(), encoding="utf-8")
+    parser.optionxform = str  # type: ignore[assignment]  # preserve key casing exactly
+    parser.read_string(bundled_config_text())
 
     if not parser.has_section(_COMMA_SECTION):
         parser.add_section(_COMMA_SECTION)
@@ -79,8 +73,6 @@ def render_bundled_config(config: DbttConfig) -> str:
         "capitalisation_policy",
         "upper" if config.uppercase_keywords else "lower",
     )
-
-    import io
 
     buffer = io.StringIO()
     parser.write(buffer)

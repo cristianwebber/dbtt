@@ -61,6 +61,20 @@ def test_error_extraction_reports_error():
     assert doc["models"] == []
 
 
+def test_merge_into_model_with_empty_columns_key(tmp_path):
+    # A schema file where a model has `columns:` present but empty parses the
+    # value as None; merging must not crash and should populate it.
+    path = tmp_path / "_models.yml"
+    path.write_text("version: 2\nmodels:\n  - name: m\n    columns:\n")
+    doc = yaml_io.load(path)
+    result = schema_gen.merge_model(
+        doc, "m", Path("m.sql"), _extraction(["id", "amount"]), ""
+    )
+    assert result.existed is True
+    assert result.added_columns == ["id", "amount"]
+    assert [c["name"] for c in doc["models"][0]["columns"]] == ["id", "amount"]
+
+
 def test_generate_for_sql_reads_file_and_survives_roundtrip(tmp_path):
     sql = tmp_path / "stg_customers.sql"
     sql.write_text(
