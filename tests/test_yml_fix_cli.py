@@ -76,6 +76,19 @@ def test_fix_preserves_comments_through_cli(tmp_path):
     assert "# striped" in out
 
 
+def test_fix_reports_load_error_and_continues(tmp_path):
+    models = tmp_path / "models"
+    good = _schema(models, "_good.yml")  # unsorted, valid
+    (models / "_bad.yml").write_text("foo: [1, 2\n")  # malformed YAML
+
+    result = runner.invoke(app, ["yml", "fix", str(models)])
+    assert result.exit_code == 0  # one bad file doesn't abort the run
+    assert "load error" in result.output
+    # the good file was still reordered
+    lines = [ln.strip() for ln in good.read_text().splitlines() if "name:" in ln]
+    assert lines == ["- name: a", "- name: b", "- name: c"]
+
+
 def test_fix_no_yaml_files_errors(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()

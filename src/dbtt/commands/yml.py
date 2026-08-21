@@ -75,6 +75,18 @@ def _dump_str(doc) -> str:
     return buf.getvalue()
 
 
+def _safe_load(path: Path) -> tuple[object, Optional[str]]:
+    """Load YAML, returning (doc, None) or (None, error) instead of raising.
+
+    Guards every command against a single malformed file crashing the run.
+    """
+    try:
+        return yaml_io.load(path), None
+    except Exception as err:  # ruamel raises several parser/scanner error types
+        first_line = next((ln for ln in str(err).splitlines() if ln.strip()), "parse error")
+        return None, first_line.strip()
+
+
 @app.command()
 def generate(
     paths: Annotated[
@@ -114,7 +126,7 @@ def generate(
     for sql_file in sql_files:
         groups.setdefault(_target_for(sql_file, output, filename), []).append(sql_file)
 
-    table = Table(title="dbtt yaml generate")
+    table = Table(title="dbtt yml generate")
     table.add_column("Model", style="cyan")
     table.add_column("Schema file", style="magenta")
     table.add_column("Result", style="green")
@@ -122,7 +134,15 @@ def generate(
     docs: dict[Path, object] = {}
     warnings: list[str] = []
     for target, files in groups.items():
-        loaded = yaml_io.load(target) if target.exists() else None
+        loaded: object = None
+        if target.exists():
+            loaded, error = _safe_load(target)
+            if error is not None:
+                table.add_row("—", target.name, f"[red]load error:[/red] {error}")
+                continue  # never overwrite a file we couldn't read
+            if loaded is not None and not isinstance(loaded, dict):
+                table.add_row("—", target.name, "[red]skipped:[/red] not a schema mapping")
+                continue  # never clobber unexpected content
         doc = loaded if isinstance(loaded, dict) else schema_gen.new_doc()
         docs[target] = doc
 
@@ -181,7 +201,10 @@ def fix(
 
     changed = 0
     for path in yml_files:
-        doc = yaml_io.load(path)
+        doc, error = _safe_load(path)
+        if error is not None:
+            table.add_row(str(path), f"[red]load error:[/red] {error}")
+            continue
         if not isinstance(doc, dict) or "models" not in doc:
             table.add_row(str(path), "[dim]skipped (no models)[/dim]")
             continue

@@ -128,6 +128,29 @@ def test_generate_reports_select_star_warning(tmp_path):
     assert "SELECT *" in result.output
 
 
+def test_generate_does_not_clobber_unreadable_target(tmp_path):
+    models = tmp_path / "models"
+    _make_model(models, "m", "select id from {{ ref('x') }}")
+    bad = models / "_models.yml"
+    bad.write_text("foo: [1, 2\n")  # malformed YAML
+
+    result = runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
+    assert result.exit_code == 0
+    assert "load error" in result.output
+    assert bad.read_text() == "foo: [1, 2\n"  # left untouched
+
+
+def test_generate_skips_non_mapping_target(tmp_path):
+    models = tmp_path / "models"
+    _make_model(models, "m", "select id from {{ ref('x') }}")
+    target = models / "_models.yml"
+    target.write_text("- a\n- b\n")  # valid YAML, but a list not a mapping
+
+    result = runner.invoke(app, ["yml", "generate", str(models), "--dialect", "duckdb"])
+    assert "not a schema mapping" in result.output
+    assert target.read_text() == "- a\n- b\n"  # not clobbered
+
+
 def test_generate_no_models_errors(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
