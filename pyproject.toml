@@ -11,6 +11,7 @@ dependencies = [
     "ruamel.yaml>=0.17",
     "sqlglot>=20",
     "sqlfluff>=3",
+    "tomli>=1.1; python_version < '3.11'",
 ]
 
 [dependency-groups]

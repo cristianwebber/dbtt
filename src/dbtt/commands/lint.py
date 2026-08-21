@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -18,8 +19,9 @@ from rich.console import Console
 from typing_extensions import Annotated
 
 from ..context import Context
+from ..core.config import ConfigError, DbttConfig, load_config
 from ..core.dbt_dialect import detect_dialect
-from ..core.sqlfluff_config import ResolvedConfig, resolve_config
+from ..core.sqlfluff_config import ResolvedConfig, render_bundled_config, resolve_config
 
 console = Console()
 
@@ -35,11 +37,24 @@ def _config_for(app_ctx: Context) -> ResolvedConfig:
     return resolve_config(app_ctx.cwd, root)
 
 
-def _announce(resolved: ResolvedConfig) -> None:
+def _load_dbtt_config(app_ctx: Context) -> DbttConfig:
+    root = app_ctx.project.root if app_ctx.project else None
+    try:
+        return load_config(app_ctx.cwd, root)
+    except ConfigError as err:
+        console.print(f"[bold red]Config error:[/bold red] {err}")
+        raise typer.Exit(code=2)
+
+
+def _announce(resolved: ResolvedConfig, config: DbttConfig) -> None:
     if resolved.source == "user":
-        console.print("[dim]Using project's own .sqlfluff[/dim]")
-    else:
-        console.print("[dim]Using dbtt's bundled ruleset (no project .sqlfluff found)[/dim]")
+        console.print("[dim]Using project's own .sqlfluff ([tool.dbtt] ignored)[/dim]")
+        return
+    origin = f" ({config.source})" if config.source else " (defaults)"
+    console.print(
+        f"[dim]Using dbtt's bundled ruleset{origin}: "
+        f"commas={config.commas}, uppercase_keywords={config.uppercase_keywords}[/dim]"
+    )
 
 
 def _resolve_dialect(app_ctx: Context, explicit: Optional[str]) -> tuple[Optional[str], str]:
@@ -78,19 +93,38 @@ def _dialect_for_run(app_ctx: Context, resolved: ResolvedConfig, explicit: Optio
 def _run_sqlfluff(
     subcommand: str,
     paths: list[Path],
-    resolved: ResolvedConfig,
+    config_path: Optional[Path],
     dialect: Optional[str],
     extra: list[str],
 ) -> int:
     cmd = [sys.executable, "-m", "sqlfluff", subcommand]
-    if resolved.path is not None:
-        cmd += ["--config", str(resolved.path)]
+    if config_path is not None:
+        cmd += ["--config", str(config_path)]
     if dialect:
         cmd += ["--dialect", dialect]
     cmd += extra
     cmd += [str(p) for p in paths]
     completed = subprocess.run(cmd)
     return completed.returncode
+
+
+def _execute(
+    subcommand: str,
+    resolved: ResolvedConfig,
+    config: DbttConfig,
+    paths: list[Path],
+    dialect: Optional[str],
+    extra: list[str],
+) -> int:
+    """Run sqlfluff, materializing the effective bundled config when applicable."""
+    if resolved.source == "user":
+        # The project's own .sqlfluff governs; sqlfluff auto-discovers it.
+        return _run_sqlfluff(subcommand, paths, None, dialect, extra)
+    # Render the bundled ruleset with the user's [tool.dbtt] toggles applied.
+    with tempfile.TemporaryDirectory() as tmp:
+        effective = Path(tmp) / "effective.sqlfluff"
+        effective.write_text(render_bundled_config(config), encoding="utf-8")
+        return _run_sqlfluff(subcommand, paths, effective, dialect, extra)
 
 
 def lint(
@@ -107,9 +141,10 @@ def lint(
     """Lint SQL models and report style violations without changing files."""
     app_ctx = _resolve(ctx)
     resolved = _config_for(app_ctx)
-    _announce(resolved)
+    config = _load_dbtt_config(app_ctx)
+    _announce(resolved, config)
     run_dialect = _dialect_for_run(app_ctx, resolved, dialect)
-    code = _run_sqlfluff("lint", paths or [Path(".")], resolved, run_dialect, [])
+    code = _execute("lint", resolved, config, paths or [Path(".")], run_dialect, [])
     raise typer.Exit(code=code)
 
 
@@ -131,8 +166,9 @@ def fix(
     """Auto-fix SQL models in place (leading commas, casing, aliasing, ...)."""
     app_ctx = _resolve(ctx)
     resolved = _config_for(app_ctx)
-    _announce(resolved)
+    config = _load_dbtt_config(app_ctx)
+    _announce(resolved, config)
     run_dialect = _dialect_for_run(app_ctx, resolved, dialect)
     extra = ["--check"] if check else []
-    code = _run_sqlfluff("fix", paths or [Path(".")], resolved, run_dialect, extra)
+    code = _execute("fix", resolved, config, paths or [Path(".")], run_dialect, extra)
     raise typer.Exit(code=code)

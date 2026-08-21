@@ -79,6 +79,43 @@ def test_explicit_dialect_flag_overrides(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
 
 
+def test_config_switches_to_trailing_commas(tmp_path, monkeypatch):
+    # With commas=trailing + lowercase keywords, a lowercase trailing-comma model
+    # should now be accepted where the defaults would have rejected it.
+    _duckdb_project(tmp_path)
+    (tmp_path / "dbtt.toml").write_text(
+        "commas = \"trailing\"\nuppercase_keywords = false\n"
+    )
+    clean = tmp_path / "models" / "clean.sql"
+    clean.write_text("select\n    id,\n    amount\nfrom {{ ref('orders') }}\n")
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["lint", "models/clean.sql"])
+    assert "commas=trailing" in result.output
+    assert result.exit_code == 0, result.output
+
+
+def test_leading_default_rejects_trailing_commas(tmp_path, monkeypatch):
+    # Same file, no config -> defaults (leading) -> trailing commas are flagged.
+    _duckdb_project(tmp_path)
+    clean = tmp_path / "models" / "clean.sql"
+    clean.write_text("SELECT\n    id,\n    amount\nFROM {{ ref('orders') }}\n")
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["lint", "models/clean.sql"])
+    assert result.exit_code != 0  # trailing commas rejected under leading default
+    assert "commas=leading" in result.output
+
+
+def test_invalid_config_reports_error(tmp_path, monkeypatch):
+    _duckdb_project(tmp_path)
+    (tmp_path / "dbtt.toml").write_text("commas = \"diagonal\"\n")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["lint", "models/bad.sql"])
+    assert result.exit_code == 2
+    assert "Config error" in result.output
+
+
 def test_user_sqlfluff_is_respected(tmp_path, monkeypatch):
     model = _duckdb_project(tmp_path)
     # Project ships its own config -> dbtt must defer to it, not the bundled one.

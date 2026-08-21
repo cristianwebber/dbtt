@@ -69,7 +69,19 @@ Bundled house style:
 | Columns in joins | must be table-qualified |
 | `GROUP BY` / `ORDER BY` | by column name, not position |
 
-Override any of these by adding your own `.sqlfluff` to the project.
+#### Configuring the house style
+
+The two most-changed rules are exposed through a `[tool.dbtt]` table in your
+`pyproject.toml` (or a standalone `dbtt.toml`) — standard TOML, no new format:
+
+```toml
+[tool.dbtt]
+commas = "leading"          # or "trailing"
+uppercase_keywords = true   # false -> lowercase keywords
+```
+
+For full control, add your own `.sqlfluff` to the project — dbtt then defers to
+it entirely and `[tool.dbtt]` is ignored.
 
 ## Development
 

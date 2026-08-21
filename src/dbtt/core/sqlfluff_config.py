@@ -8,11 +8,17 @@ never merged — a user config fully replaces the defaults.
 
 from __future__ import annotations
 
+import configparser
 from dataclasses import dataclass
 from importlib.resources import as_file, files
 from pathlib import Path
 
+from .config import DbttConfig
+
 USER_CONFIG_NAMES = (".sqlfluff",)
+
+_COMMA_SECTION = "sqlfluff:layout:type:comma"
+_KEYWORDS_SECTION = "sqlfluff:rules:capitalisation.keywords"
 
 
 @dataclass
@@ -49,3 +55,33 @@ def resolve_config(start: Path, project_root: Path | None) -> ResolvedConfig:
     if user is not None:
         return ResolvedConfig(source="user", path=None)
     return ResolvedConfig(source="bundled", path=bundled_config_path())
+
+
+def render_bundled_config(config: DbttConfig) -> str:
+    """Return the bundled sqlfluff ruleset as text, with dbtt toggles applied.
+
+    The static base ``.sqlfluff`` is loaded and the two user-facing switches
+    (comma placement, keyword casing) are overlaid on top, so a user's
+    ``[tool.dbtt]`` settings change the effective ruleset without editing it.
+    """
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str  # preserve key casing exactly
+    parser.read(bundled_config_path(), encoding="utf-8")
+
+    if not parser.has_section(_COMMA_SECTION):
+        parser.add_section(_COMMA_SECTION)
+    parser.set(_COMMA_SECTION, "line_position", config.commas)
+
+    if not parser.has_section(_KEYWORDS_SECTION):
+        parser.add_section(_KEYWORDS_SECTION)
+    parser.set(
+        _KEYWORDS_SECTION,
+        "capitalisation_policy",
+        "upper" if config.uppercase_keywords else "lower",
+    )
+
+    import io
+
+    buffer = io.StringIO()
+    parser.write(buffer)
+    return buffer.getvalue()

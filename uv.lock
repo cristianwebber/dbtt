@@ -85,6 +85,7 @@ dependencies = [
     { name = "ruamel-yaml" },
     { name = "sqlfluff" },
     { name = "sqlglot" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "typer" },
 ]
 
@@ -101,6 +102,7 @@ requires-dist = [
     { name = "ruamel-yaml", specifier = ">=0.17" },
     { name = "sqlfluff", specifier = ">=3" },
     { name = "sqlglot", specifier = ">=20" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=1.1" },
     { name = "typer", specifier = ">=0.12" },
 ]
 
