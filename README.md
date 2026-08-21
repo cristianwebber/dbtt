@@ -1,5 +1,7 @@
 # dbtt
 
+[![CI](https://github.com/cristianwebber/dbtt/actions/workflows/ci.yml/badge.svg)](https://github.com/cristianwebber/dbtt/actions/workflows/ci.yml)
+
 A batteries-included toolkit that layers workflow helpers on top of
 [dbt-core](https://github.com/dbt-labs/dbt-core). dbt stays the engine; `dbtt`
 adds the ergonomic commands that dbt leaves out of the box.
