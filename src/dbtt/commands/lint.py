@@ -158,10 +158,6 @@ def fix(
         Optional[str],
         typer.Option("--dialect", help="Override the SQL dialect."),
     ] = None,
-    check: Annotated[
-        bool,
-        typer.Option("--check", help="Report what would change without writing files."),
-    ] = False,
 ) -> None:
     """Auto-fix SQL models in place (leading commas, casing, aliasing, ...)."""
     app_ctx = _resolve(ctx)
@@ -169,6 +165,5 @@ def fix(
     config = _load_dbtt_config(app_ctx)
     _announce(resolved, config)
     run_dialect = _dialect_for_run(app_ctx, resolved, dialect)
-    extra = ["--check"] if check else []
-    code = _execute("fix", resolved, config, paths or [Path(".")], run_dialect, extra)
+    code = _execute("fix", resolved, config, paths or [Path(".")], run_dialect, [])
     raise typer.Exit(code=code)

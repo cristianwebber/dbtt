@@ -59,9 +59,8 @@ opinionated bundled ruleset — **unless the project ships its own `.sqlfluff`,
 in which case dbtt defers to it entirely** (the two are never merged).
 
 ```bash
-dbtt lint models/            # report violations
+dbtt lint models/            # report violations (read-only)
 dbtt fix models/             # auto-fix in place
-dbtt fix models/ --check     # show what would change, write nothing
 dbtt lint models/ --dialect bigquery   # override the dialect
 ```
 
